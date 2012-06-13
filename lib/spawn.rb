@@ -9,8 +9,12 @@ module Spawn
   
   # things to close in child process
   @@resources = []
-  # in some environments, logger isn't defined
-  @@logger = Rails.logger || Logger.new(STDERR)
+  # create a specific log for spawn.
+  
+  spawn_log_file = File.open("#{Rails.root}/log/spawn.log",'a')
+  spawn_log_file.sync = true
+  @@logger = Logger.new(spawn_log_file)
+  
   # forked children to kill on exit
   @@punks = []
 
@@ -184,8 +188,3 @@ module Spawn
     return SpawnId.new(:thread, thr)
   end
 end
-
-
-ActiveRecord::Base.send :include, Spawn if defined? ActiveRecord
-ActionController::Base.send :include, Spawn
-ActiveRecord::Observer.send :include, Spawn if defined? ActiveRecord
