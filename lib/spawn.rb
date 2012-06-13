@@ -6,14 +6,14 @@ module Spawn
     :kill   => false,
     :argv   => nil
   }
-  
+
   # things to close in child process
   @@resources = []
   # create a specific log for spawn.
-  
-  spawn_log_file = File.open("#{Rails.root}/log/spawn.log",'a')
+
+  spawn_log_file = File.open("spawn.log",'a')
   spawn_log_file.sync = true
-  @@logger = Logger.new(spawn_log_file)
+  @@spawn_logger = Logger.new(spawn_log_file)
   
   # forked children to kill on exit
   @@punks = []
@@ -31,7 +31,7 @@ module Spawn
   #   :argv   => changes name of the spawned process as seen in ps
   def self.default_options(options = {})
     @@default_options.merge!(options)
-    @@logger.info "spawn> default options = #{options.inspect}"
+    @@spawn_logger.info "spawn> default options = #{options.inspect}"
   end
 
   # set the resources to disconnect from in the child process (when forking)
@@ -61,7 +61,7 @@ module Spawn
   def self.kill_punks
     @@punks.each do |punk|
       if alive?(punk)
-        @@logger.info "spawn> parent(#{Process.pid}) killing child(#{punk})"
+        @@spawn_logger.info "spawn> parent(#{Process.pid}) killing child(#{punk})"
         begin
           Process.kill("TERM", punk)
         rescue
@@ -119,11 +119,11 @@ module Spawn
   def fork_it(options)
     # The problem with rails is that it only has one connection (per class),
     # so when we fork a new process, we need to reconnect.
-    @@logger.debug "spawn> parent PID = #{Process.pid}"
+    @@spawn_logger.debug "spawn> parent PID = #{Process.pid}"
     child = fork do
       begin
         start = Time.now
-        @@logger.debug "spawn> child PID = #{Process.pid}"
+        @@spawn_logger.debug "spawn> child PID = #{Process.pid}"
 
         # this child has no children of it's own to kill (yet)
         @@punks = []
@@ -145,15 +145,15 @@ module Spawn
         yield
 
       rescue => ex
-        @@logger.error "spawn> Exception in child[#{Process.pid}] - #{ex.class}: #{ex.message}"
+        @@spawn_logger.error "spawn> Exception in child[#{Process.pid}] - #{ex.class}: #{ex.message}"
       ensure
         begin
           # to be safe, catch errors on closing the connnections too
           ActiveRecord::Base.connection_handler.clear_all_connections! if defined? ActiveRecord
         ensure
-          @@logger.info "spawn> child[#{Process.pid}] took #{Time.now - start} sec"
+          @@spawn_logger.info "spawn> child[#{Process.pid}] took #{Time.now - start} sec"
           # ensure log is flushed since we are using exit!
-          @@logger.flush if @@logger.respond_to?(:flush)
+          @@spawn_logger.flush if @@spawn_logger.respond_to?(:flush)
           # this child might also have children to kill if it called spawn
           Spawn::kill_punks
           # this form of exit doesn't call at_exit handlers
@@ -171,7 +171,7 @@ module Spawn
     # mark this child for death when this process dies
     if options[:kill]
       @@punks << child
-      @@logger.debug "spawn> death row = #{@@punks.inspect}"
+      @@spawn_logger.debug "spawn> death row = #{@@punks.inspect}"
     end
 
     return SpawnId.new(:fork, child)
